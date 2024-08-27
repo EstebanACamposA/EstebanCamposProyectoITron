@@ -16,6 +16,7 @@ public class Player
     public int hiperspeed_remaining = 0;  //Starts at 0.  //Set by power ups.   //Timer set on this.usePowerUp; decreased by UpdatePowerUps.
     public DataStructures.Lists.MatrixLinkedList<MapCell> map;  //Game Manager gives access to the map to the Player objects.
     private int item_timer = 90;
+    public bool character_destroyed = false;
 
     //Movement information. Used to decide direction when multiple wasd keys are pressed. true for vertical; false for horizontal.
     private bool previous_direction = true;
@@ -176,61 +177,79 @@ public class Player
         }
         //Do nothing if both x and y are 0.
     }
+    public void ChangeDirection(Point2D xy)
+    {
+        ChangeDirection(xy.x, xy.y);
+    }
 
             /// <summary>
             /// Moves player one cell. The rate at which this function is called must depend on speed.
             /// </summary>
     public void Update()
-    {
+    {   
         fuel -= 0.2f;   //CHECK IF FUEL IS LESS THAN 0.2 TO DESTROY PLAYER. THIS CODE IS NOT COMPLETE.
-        
-        //Use current direction to get y and x to add a new node. The new node will be the new position of the player;
-        //Sets previous_direction. false, horizontal; true, vertical
-        int x_to_add = 0;
-        int y_to_add = 0;
-        switch (direction)
-            {
-                case 0:
-                    x_to_add = 1;
-                    previous_direction = false;
-                    break;
-                case 1:
-                    y_to_add = 1;
-                    previous_direction = true;
-                    break;
-                case 2:
-                    x_to_add = -1;
-                    previous_direction = false;
-                    break;
-                case 3:
-                    y_to_add = -1;
-                    previous_direction = true;
-                    break;
-                default:
-                    break;
-            }
-    Point2D current_head = trail.First.Data;
-    Point2D new_head = new(current_head.x + x_to_add, current_head.y + y_to_add);
-
-    // Use modulus of current coords by the dimensions of the map matrix to make the player teleport to the opposite side once they've reached a limit.
-    new_head.x %= GameManagement.Instance.Rows();       //rows columns may be REVERSED!!!!!
-    new_head.y %= GameManagement.Instance.Columns();
-    // Puts the player at the start of the trail list.
-    trail.AddAt(new_head, 0);
-    // Updates de player's position on the map.
-    map.FindAt(new_head.x, new_head.y).player_IDs.Add(player_ID);
-    map.FindAt(current_head.x, current_head.y).player_IDs.DeleteValue(player_ID);
-    // Creates LP on the map.
-    map.FindAt(current_head.x, current_head.y).LP += 1;
-    map.FindAt(current_head.x, current_head.y).LP_direction = direction;
-    map.FindAt(current_head.x, current_head.y).LP_particle_is_instantiated = false;
-
-    // Deletes oldest LP if LP_size has been reached.
-    if (trail.Size() > LP_size)
+        if (!character_destroyed)
         {
-        Point2D LP_to_delete_from_matrix = trail.FindLast();
-        map.FindAt(LP_to_delete_from_matrix.x, LP_to_delete_from_matrix.y).LP -= 1;
-        trail.Delete();
+            
+            
+            //Use current direction to get y and x to add a new node. The new node will be the new position of the player;
+            //Sets previous_direction. false, horizontal; true, vertical
+            int x_to_add = 0;
+            int y_to_add = 0;
+            switch (direction)
+                {
+                    case 0:
+                        x_to_add = 1;
+                        previous_direction = false;
+                        break;
+                    case 1:
+                        y_to_add = 1;
+                        previous_direction = true;
+                        break;
+                    case 2:
+                        x_to_add = -1;
+                        previous_direction = false;
+                        break;
+                    case 3:
+                        y_to_add = -1;
+                        previous_direction = true;
+                        break;
+                    default:
+                        break;
+                }
+            Point2D current_head = trail.First.Data;
+            Point2D new_head = new(current_head.x + x_to_add, current_head.y + y_to_add);
+
+            // Use modulus of current coords by the dimensions of the map matrix to make the player teleport to the opposite side once they've reached a limit.
+            new_head.x = (new_head.x + GameManagement.Instance.Rows())%GameManagement.Instance.Rows();       //rows columns may be REVERSED!!!!!
+            new_head.y = (new_head.y + GameManagement.Instance.Columns())%GameManagement.Instance.Columns();
+
+            // Puts the player at the start of the trail list.
+            trail.AddAt(new_head, 0);
+            // Updates de player's position on the map.
+            map.FindAt(new_head.x, new_head.y).player_IDs.Add(player_ID);
+            map.FindAt(current_head.x, current_head.y).player_IDs.DeleteValue(player_ID);
+            // Creates LP on the map.
+            map.FindAt(current_head.x, current_head.y).LP += 1;
+            map.FindAt(current_head.x, current_head.y).LP_direction = direction;
+            map.FindAt(current_head.x, current_head.y).LP_particle_is_instantiated = false;
+        }
+        // Deletes oldest LP if LP_size has been reached.
+        if (trail.Size() > LP_size)
+        {
+            if (player_ID == 0)
+            {
+                Debug.Log("LP_size = " + LP_size);    
+                Debug.Log("trail.Size() = " + trail.Size());
+            }
+        
+            if (trail.Size() > 1)
+            {
+                // Only deletes LP if trail > 1. If it's 1 that means the player is only the head (this happens when is being deleted).
+                Point2D LP_to_delete_from_matrix = trail.FindLast();
+                map.FindAt(LP_to_delete_from_matrix.x, LP_to_delete_from_matrix.y).LP -= 1;    
+            }
+            trail.Delete();
         }
     }
 
@@ -251,6 +270,8 @@ public class Player
     public void Delete()
     {
         Debug.Log("DELETE PLAYER WITH ID: " + player_ID);   //CODE FOR DELETING PLAYERS PENDING HERE!!!
+        LP_size = 0;
+        character_destroyed = true;
     }
 }
 
