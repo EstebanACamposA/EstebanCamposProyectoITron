@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using DataStructures;
 using System.Drawing;
@@ -17,8 +15,8 @@ public class GameManagement : MonoBehaviour
     public int playerCount = 6;
     public int[] turns;
     public Player[] players;
-    public static int m = 12;
-    public static int n = 15;
+    public int m = 24;
+    public int n = 30;
     public int user_player = 0;
     public DataStructures.Lists.MatrixLinkedList<MapCell> map;
     // Graphics related variables.
@@ -69,10 +67,15 @@ public class GameManagement : MonoBehaviour
         for (int i = 0; i < playerCount; i++)
         {
             turns[i] = i*60;    // Delay at the start of the game for each player to start based on their ID. Player 0 is the user and has no delay.
-            int x_of_new_player = n/playerCount*i;
-            int y_of_new_player = m/2 + 3;
+            int x_of_new_player = m/playerCount*i;
+            int y_of_new_player = n/2 + 3;
             Point2D coords_of_new_player = new(x_of_new_player, y_of_new_player);
-            players[i] = new Player(i, coords_of_new_player, 3, map);   //  ----!!!!!!!!!!!!speed SHOULD BE Random.Range(1,11), NOT 3!!!!!!!!!!!!----
+            int SPEEDdELETETHIS = 10;
+            if (i == 0)
+            {
+                SPEEDdELETETHIS = 30;
+            }
+            players[i] = new Player(i, coords_of_new_player, SPEEDdELETETHIS, map);   //  ----!!!!!!!!!!!!speed SHOULD BE Random.Range(1,11), NOT 3!!!!!!!!!!!!----
         }
 
 
@@ -100,7 +103,7 @@ public class GameManagement : MonoBehaviour
             if (turns[i] < Time.frameCount)
             {
                 // Updates player and then map only when is their turn.
-                // BotBehavior(int player_ID);
+                BotBehavior(i, false);
                 players[i].Update();
                 turns[i] += 1200/players[i].speed;
                 UpdateMap();
@@ -219,59 +222,197 @@ public class GameManagement : MonoBehaviour
 
     private void BotBehavior(int current_player_ID, bool affect_player_0)
     {
-        switch (current_player_ID)
+        if (current_player_ID == user_player & !affect_player_0)
         {
-            case 0:
-            BotBehaviorDefault(0);
-            return;
-            case 1:
-            BotBehaviorFollow(1, affect_player_0); //if affects 0 calculates from 0 to user
-            return;
-            case 2:
-            BotBehaviorFollow(2, affect_player_0);
-            return;
-            case 3:
-            BotBehaviorItems(affect_player_0);
-            return;
-            case 4:
-            BotBehaviorRandom(affect_player_0);
             return;
         }
+        if ((!players[current_player_ID].character_destroyed & !affect_player_0) | (!players[0].character_destroyed&affect_player_0))
+        {
+            if (!affect_player_0)
+            {
+                switch (current_player_ID)
+                {
+                    case 0:
+                    BotBehavior(user_player, true);
+                    return;
+                    case 1:
+                    BotBehaviorFollow(1, 1, user_player);
+                    return;
+                    case 2:
+                    if (user_player == 1)
+                    {
+                        BotBehaviorFollow(0, 2, user_player);    
+                    }
+                    else
+                    {
+                        BotBehaviorFollow(1, 2, user_player);
+                    }
+                    return;
+                    case 3:
+                    BotBehaviorItems(3);
+                    return;
+                    case 4:
+                    BotBehaviorRandom(4);
+                    return;
+                }    
+            }
+            else
+            {
+                switch (current_player_ID)
+                {
+                    case 0:
+                    // BotBehavior(user_player, true);
+                    return;
+                    case 1:
+                    BotBehaviorFollow(0, 0, user_player);
+                    return;
+                    case 2:
+                    BotBehaviorFollow(0, 0, user_player);
+                    return;
+                    case 3:
+                    BotBehaviorItems(0);
+                    return;
+                    case 4:
+                    BotBehaviorRandom(0);
+                    return;
+                }
+            }
+                
+        }
+        
     }
-    private void BotBehaviorDefault(int player_ID)
+    private void BotBehaviorFollow(int from_player_of_ID, int apply_on, int to_player_of_ID)
     {
-        //Switches user_player and BotBehavior's indexes when user_player != 0 so that no behaviors are left unused when user_player !=0.
-        if (user_player != 0)
+        //Gets displacement necesary to reach the user from the player's (bot's) position.
+        Point2D player_position = players[from_player_of_ID].trail.FindAt(0);   //This crashes if player is destroyed and thus trail has no elements.
+        Point2D user_position = players[to_player_of_ID].trail.FindAt(0);   //This crashes if the user's players is destroyed (loses). SHOULD BOTBEHAVIORS BE DISABLED WHEN PLAYER LOSES?
+        int x_displacement = user_position.x - player_position.x;
+        int y_displacement = user_position.y - player_position.y;
+        //Accounts for map cyclical movement.
+        if (x_displacement > m/2)
         {
-            BotBehavior(user_player, true);
+            x_displacement -= m;
         }
+        if (x_displacement < -1*m/2)
+        {
+            x_displacement += m;
+        }
+
+        if (y_displacement > n/2)
+        {
+            y_displacement -= n;
+        }
+        if (y_displacement < -1*n/2)
+        {
+            y_displacement += n;
+        }
+        //Moves in a different direction when too close to player.
+        int square_distance = (int)Math.Pow(x_displacement,2) + (int)Math.Pow(y_displacement,2);
+        int square_LP_lenght_plus_one = (int)Math.Pow(players[to_player_of_ID].LP_size + 1,2);
+
+        //Takes normalized components so that they can be used in Player.ChangeDirection().
+        if (x_displacement < 0)
+        {
+            x_displacement = -1;
+        }
+        if (x_displacement > 0)
+        {
+            x_displacement = 1;
+        }
+        if (y_displacement < 0)
+        {
+            y_displacement = -1;
+        }
+        if (y_displacement > 0)
+        {
+            y_displacement = 1;
+        }
+
+        if (square_distance <= square_LP_lenght_plus_one)
+        {
+            //Perpendicular movement if close.
+            players[apply_on].ChangeDirection(-1*y_displacement, x_displacement);
+            return;
+        }
+        // Helps to avoid LP.
+        if (map.FindAt((player_position.x + x_displacement + m)%m, player_position.y).LP >= 1)
+        {
+            x_displacement *=-1;
+        }
+        if (map.FindAt(player_position.x, (player_position.y + y_displacement + n)%n).LP >= 1)
+        {
+            y_displacement *=-1;
+        }
+        players[apply_on].ChangeDirection(x_displacement, y_displacement);
     }
-    private void BotBehaviorFollow(bool redirected, bool copy)
+    private void BotBehaviorItems(int from_player_of_ID)
     {
-        int player_ID = 1;
-        if (redirected)
+        //Finds nearest item.
+        Point2D nearest = new(-1,-1);
+        int min_square_distance = (int)Math.Pow(m, 2) + (int)Math.Pow(n, 2);
+
+        Point2D player_position = players[from_player_of_ID].trail.FindAt(0);   //This crashes if player is destroyed and thus trail has no elements.
+
+        for (int i = 0; i < m; i++)
         {
-            player_ID = 0;
+            for (int j = 0; j < n; j++)
+            {
+                if (map.FindAt(i,j).item_PU_IDs.Size() >= 1)
+                {
+                    //Gets displacement necesary to reach the user from the player's (bot's) position.
+                    Point2D item_position = new(i,j);   //This crashes if the user's players is destroyed (loses). SHOULD BOTBEHAVIORS BE DISABLED WHEN PLAYER LOSES?
+                    int x_displacement = item_position.x - player_position.x;
+                    int y_displacement = item_position.y - player_position.y;
+                    //Accounts for map cyclical movement.
+                    if (x_displacement > m/2)
+                    {
+                        x_displacement -= m;
+                    }
+                    if (x_displacement < -1*m/2)
+                    {
+                        x_displacement += m;
+                    }
+
+                    if (y_displacement > n/2)
+                    {
+                        y_displacement -= n;
+                    }
+                    if (y_displacement < -1*n/2)
+                    {
+                        y_displacement += n;
+                    }
+                    //Gets square distance to object
+                    int square_distance = (int)Math.Pow(x_displacement,2) + (int)Math.Pow(y_displacement,2);
+                    if (square_distance < min_square_distance)
+                    {
+                        min_square_distance = square_distance;
+                        nearest = item_position;
+                    }
+                }
+            }
         }
-        if (player_ID != user_player & !players[player_ID].character_destroyed)
+        if (nearest.x != -1)    // If an item was found.
         {
-            //Gets displacement necesary to reach the user from the player's (bot's) position.
-            Point2D player_position = players[player_ID].trail.FindAt(0);   //This crashes if player is destroyed and thus trail has no elements.
-            Point2D user_position = players[user_player].trail.FindAt(0);   //This crashes if the user's players is destroyed (loses). SHOULD BOTBEHAVIORS BE DISABLED WHEN PLAYER LOSES?
-            int x_displacement = user_position.x - player_position.x;
-            int y_displacement = user_position.y - player_position.y;
+            int x_displacement = nearest.x - player_position.x;
+            int y_displacement = nearest.y - player_position.y;
             //Accounts for map cyclical movement.
-            if (x_displacement > m/2 | x_displacement < -1*m/2)
+            if (x_displacement > m/2)
             {
-                x_displacement = m-x_displacement;
+                x_displacement -= m;
             }
-            if (y_displacement > n/2 | y_displacement < -1*n/2)
+            if (x_displacement < -1*m/2)
             {
-                y_displacement = n-y_displacement;
+                x_displacement += m;
             }
-            //Moves in a different direction when too close to player.
-            int square_distance = (int)Math.Pow(x_displacement,2) + (int)Math.Pow(y_displacement,2);
-            int square_LP_lenght_plus_one = (int)Math.Pow(players[user_player].LP_size + 1,2);
+
+            if (y_displacement > n/2)
+            {
+                y_displacement -= n;
+            }
+            if (y_displacement < -1*n/2)
+            {
+                y_displacement += n;
+            }
 
             //Takes normalized components so that they can be used in Player.ChangeDirection().
             if (x_displacement < 0)
@@ -291,22 +432,17 @@ public class GameManagement : MonoBehaviour
                 y_displacement = 1;
             }
 
-            if (copy)
-            {
-                player_ID += 1;
-            }
-
-            if (square_distance <= square_LP_lenght_plus_one)
-            {
-
-                players[player_ID].ChangeDirection(-1*y_displacement, x_displacement);
-                return;
-            }
-            players[player_ID].ChangeDirection(x_displacement, y_displacement);
+            players[from_player_of_ID].ChangeDirection(x_displacement, y_displacement);
         }
     }
-    
-
+    private void BotBehaviorRandom(int from_player_of_ID)
+    {
+        if (UnityEngine.Random.Range(1,6) == 1)
+        {
+            players[from_player_of_ID].direction += 1 + UnityEngine.Random.Range(0,2)*2;
+            players[from_player_of_ID].direction %= 4;
+        }
+    }
     void Start()
     {
         // Draws tiles;
@@ -327,35 +463,57 @@ public class GameManagement : MonoBehaviour
         UpdatePlayers();
 
         //Print LP_matrix
-        if (Time.frameCount % 1200 == 0)
+        // if (Time.frameCount % 1200 == 0)
+        // {
+        //     string msg = "";
+        //     for (int i = 0; i < m; i++)
+        //     {
+        //         msg = string.Concat(msg, "[");
+        //         for (int j = 0; j < n; j++)
+        //         {
+        //             msg = string.Concat(msg, " ");
+        //             msg = string.Concat(msg, map.FindAt(i,j).LP);
+        //             // Debug.Log(map.FindAt(i,j).LP);
+        //         }
+        //         msg = string.Concat(msg, "]\n");
+        //     }
+        //     Debug.Log(msg);
+        // }
+        if (Time.frameCount % 240 == 0)
         {
-            string msg = "";
-            for (int i = 0; i < m; i++)
-            {
-                msg = string.Concat(msg, "[");
-                for (int j = 0; j < n; j++)
-                {
-                    msg = string.Concat(msg, " ");
-                    msg = string.Concat(msg, map.FindAt(i,j).LP);
-                    // Debug.Log(map.FindAt(i,j).LP);
-                }
-                msg = string.Concat(msg, "]\n");
-            }
-            Debug.Log(msg);
+            Debug.Log(players[user_player].direction);
         }
-
-
         
     }
 
     void FixedUpdate()
     {
         //Grants user control of player 0.
-        int verticalKey = (int) Input.GetAxis("Vertical");
-        int horizontalKey = (int) Input.GetAxis("Horizontal");
+        int verticalKey = 0;
+        float verticalKeyf = Input.GetAxis("Vertical");
+        if (verticalKeyf < 0)
+        {
+            verticalKey = -1;
+        }
+        if (verticalKeyf > 0)
+        {
+            verticalKey = 1;
+        }
+        
+        int horizontalKey = 0;
+        float horizontalKeyf = Input.GetAxis("Horizontal");
+        if (horizontalKeyf < 0)
+        {
+            horizontalKey = -1;
+        }
+        if (horizontalKeyf > 0)
+        {
+            horizontalKey = 1;
+        }
+
         if (verticalKey != 0 | horizontalKey != 0)
         {
-            // Debug.Log("Enters ChangeDirection with (x,y) = " + horizontalKey + ',' + verticalKey);
+            Debug.Log("Enters ChangeDirection with (x,y) = " + horizontalKey + ',' + verticalKey);
             players[0].ChangeDirection(horizontalKey, verticalKey);    
         }
     }

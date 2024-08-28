@@ -237,11 +237,12 @@ public class Player
         // Deletes oldest LP if LP_size has been reached.
         if (trail.Size() > LP_size)
         {
-            if (player_ID == 0)
-            {
-                Debug.Log("LP_size = " + LP_size);    
-                Debug.Log("trail.Size() = " + trail.Size());
-            }
+            // Prints player 0's trail information. Debugging
+            // if (player_ID == 0)
+            // {
+            //     Debug.Log("LP_size = " + LP_size);    
+            //     Debug.Log("trail.Size() = " + trail.Size());
+            // }
         
             if (trail.Size() > 1)
             {
