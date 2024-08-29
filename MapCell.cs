@@ -17,6 +17,7 @@ public class MapCell
     public int LP = 0;
     public int LP_direction = 0;
     public bool LP_particle_is_instantiated = false;
+    public int item_PU_particles_instantiated = 0;
         
     public MapCell(DataStructures.Lists.LinkedList<int> player_IDs, DataStructures.Lists.LinkedList<int> item_PU_IDs, int LP)
     {

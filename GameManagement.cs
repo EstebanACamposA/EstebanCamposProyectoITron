@@ -18,20 +18,24 @@ public class GameManagement : MonoBehaviour
     public int m = 24;
     public int n = 30;
     public int user_player = 0;
+    public int base_spawn_time = 21600;   //Time between spawns per cell.    //Underscore is ignored (e.g 500_000).
+    private int spawn_timer = 240;  //First item spawn in frames.
     public DataStructures.Lists.MatrixLinkedList<MapCell> map;
     // Graphics related variables.
     public GameObject light_path_particle;
-    // public GameObject item_fuel_cell;
-    // public GameObject item_LP_size_increase;
-    // public GameObject item_bomb;
-    // public GameObject PU_bomb;
-    // public GameObject PU_hiperspeed;
+
+    public GameObject item_fuel_cell;
+    public GameObject item_LP_size_increase;
+    public GameObject item_bomb;
+    public GameObject PU_shield;
+    public GameObject PU_hiperspeed;
 
     public GameObject tile;
     
     public int map_scale = 2;
     public int base_y = 0;
     private DataStructures.Lists.MatrixLinkedList<GameObject> LP_matrix;
+    private DataStructures.Lists.MatrixLinkedList<LinkedList<GameObject>> item_PU_matrix;
 
     private void Awake()
     {
@@ -70,10 +74,10 @@ public class GameManagement : MonoBehaviour
             int x_of_new_player = m/playerCount*i;
             int y_of_new_player = n/2 + 3;
             Point2D coords_of_new_player = new(x_of_new_player, y_of_new_player);
-            int SPEEDdELETETHIS = 10;
+            int SPEEDdELETETHIS = 5;   //others
             if (i == 0)
             {
-                SPEEDdELETETHIS = 30;
+                SPEEDdELETETHIS = 3;   //player 0
             }
             players[i] = new Player(i, coords_of_new_player, SPEEDdELETETHIS, map);   //  ----!!!!!!!!!!!!speed SHOULD BE Random.Range(1,11), NOT 3!!!!!!!!!!!!----
         }
@@ -81,8 +85,18 @@ public class GameManagement : MonoBehaviour
 
         // Creates graphic maps
         LP_matrix = new(m,n);
+        item_PU_matrix = new(m,n);
+        for (int i = 0; i < m; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                LinkedList<GameObject> item_PU_list = new();
+                item_PU_matrix.SetAt(item_PU_list, i, j);
+            }
+        }
 
-
+        //Sets max fps to 60.
+        Application.targetFrameRate = 60;
         Debug.Log("Exits Awake function.");
     }
 
@@ -105,7 +119,7 @@ public class GameManagement : MonoBehaviour
                 // Updates player and then map only when is their turn.
                 BotBehavior(i, false);
                 players[i].Update();
-                turns[i] += 1200/players[i].speed;
+                turns[i] += 120/players[i].current_speed;   // frecuency = 1/2 * speed in steps/second.
                 UpdateMap();
             }
             players[i].UpdatePowerUps();
@@ -123,28 +137,44 @@ public class GameManagement : MonoBehaviour
                 MapCell current_MC = map.FindAt(i,j);
 
                 //Checks for collision between players.
-                if (current_MC.player_IDs.Size() == 1)
+                int player_count = current_MC.player_IDs.Size();
+                if (player_count > 1)
+                {
+                    for (int k = 0; k < player_count; k++)
+                    {
+                        players[current_MC.player_IDs.FindAt(0)].Delete();
+                    }
+                }
+                //Checks for a single player collision with LP or items.
+                if (player_count == 1)
                 {
                     //Checks for a single player collision with LP.
                     if (current_MC.LP >= 1)
                     {
-                        // Debug.Log("PLAYER COLLISION WITH LP DETECTED. NEED CODE TO DESTROY THE PLAYER. NEED TO REMOVE THE PLAYER FROM player_IDs.");
-                        players[current_MC.player_IDs.FindAt(0)].Delete();
                         Debug.Log("Deleting player of ID: " + current_MC.player_IDs.FindAt(0));
+                        players[current_MC.player_IDs.FindAt(0)].Delete();
                     }
                     //Checks for player collision with items.
-                    int item_PU_IDs_size = current_MC.item_PU_IDs.Size();
-                    if (item_PU_IDs_size >= 1)
+                    // int item_PU_IDs_size = current_MC.item_PU_IDs.Size();
+                    // if (item_PU_IDs_size >= 1)
+                    // {
+                    //     for (int k = 0; k < item_PU_IDs_size; k++)
+                    //     {
+                    //         //Finds a player in current MapCell and gives all its items to it.
+                    //         players[current_MC.player_IDs.FindAt(0)].GiveItemOrPU(current_MC.item_PU_IDs.FindAt(k));    //DOES NOT EMPTY current_MC.item_PU_IDs. PROBABLY SHOULD.!!!!!!!!!!!!! 
+                    //     }
+                    // }
+                    while (current_MC.item_PU_IDs.Size() != 0)
                     {
-                        for (int k = 0; k < item_PU_IDs_size; k++)
-                        {
-                            //Finds a player in current MapCell and gives all its items to it.
-                            players[current_MC.player_IDs.FindAt(0)].GiveItemOrPU(current_MC.item_PU_IDs.FindAt(k));
-                        }
+                        players[current_MC.player_IDs.FindAt(0)].GiveItemOrPU(current_MC.item_PU_IDs.FindAt(0));
+                        current_MC.item_PU_IDs.DeleteAt(0);
                     }
                 }
-                //Check for new LP in current_MC to instantiate its particle effect GameObject.
-                //If a new LP particle needs to be instantiated.
+
+                //Particle instantiation and removal (graphics).
+
+                //Checks for new LP in current_MC to instantiate or delete its particle effect GameObject.
+                //Checks if a new LP particle needs to be instantiated.
                 if (current_MC.LP >= 1 && !current_MC.LP_particle_is_instantiated)
                 {
                     Point2D new_LP_coords = new(i,j);
@@ -158,6 +188,27 @@ public class GameManagement : MonoBehaviour
                     DeleteLPParticle(LP_to_delete_coords, current_MC);
 
                 }
+
+                //Checks if new item/PU particles need to be instantiated.
+                if (current_MC.item_PU_particles_instantiated < current_MC.item_PU_IDs.Size())
+                {
+                    Point2D new_item_PU_coords = new(i,j);
+                    for (int k = current_MC.item_PU_particles_instantiated; k < current_MC.item_PU_IDs.Size(); k++)
+                    {
+                        int item_PU_type = current_MC.item_PU_IDs.FindAt(k);
+                        InstantiateItemPUParticle(new_item_PU_coords, item_PU_type, current_MC);
+                    }
+                    // int item_PU_type = current_MC.item_PU_IDs.FindLast();
+                    // InstantiateItemPUParticle(new_item_PU_coords, current_MC);
+                }
+                //If used item/PU particles need to be deleted.
+                if (current_MC.item_PU_IDs.Size() == 0 && current_MC.item_PU_particles_instantiated > 0)
+                {
+                    Point2D item_PU_to_delete_coords = new(i,j);
+                    DeleteItemPUParticle(item_PU_to_delete_coords, current_MC);
+
+                }
+
             }
 
         }
@@ -169,6 +220,7 @@ public class GameManagement : MonoBehaviour
         //Creates particle GameObject;
         Vector3 scaled_coordinates = new(coordinates.x, base_y, coordinates.y);
         scaled_coordinates *= map_scale;
+        scaled_coordinates.y = base_y;
         GameObject instantiated = GameObject.Instantiate(light_path_particle, scaled_coordinates, Quaternion.identity);
 
         //Tells map that particle has been instantiated.
@@ -199,6 +251,70 @@ public class GameManagement : MonoBehaviour
         // LP_matrix.DeleteAt(coordinates.x, coordinates.y);   //Unnecesary to delete element of the matrix since it is not accesed.
     }
 
+    private void InstantiateItemPUParticle(Point2D coordinates, int item_PU_type, MapCell current_MC)
+    {
+        //Creates particle GameObject;
+        Vector3 scaled_coordinates = new(coordinates.x, base_y, coordinates.y);
+        scaled_coordinates *= map_scale;
+        scaled_coordinates.y = base_y;
+        
+        //Stores particle GameObject in item_PU_matrix for future removal.
+        // Debug.Log("attempting to instantiate ITEM/PU particle at coords (" + coordinates.x + ',' + coordinates.y + ')');
+        if (item_PU_matrix.FindAt(coordinates.x, coordinates.y) == null)
+        {
+            Debug.Log("item_PU_matrix.FindAt(coordinates.x, coordinates.y) == null!!!!!!!!!!!!!");
+        }
+        switch (item_PU_type)
+        {
+            case 1:
+                GameObject instantiated_fuel_cell = GameObject.Instantiate(item_fuel_cell, scaled_coordinates, Quaternion.identity);
+                item_PU_matrix.FindAt(coordinates.x, coordinates.y).Add(instantiated_fuel_cell);
+                break;
+            case 2:
+                GameObject instantiated_LP_size_increase = GameObject.Instantiate(item_LP_size_increase, scaled_coordinates, Quaternion.identity);
+                item_PU_matrix.FindAt(coordinates.x, coordinates.y).Add(instantiated_LP_size_increase);
+                break;
+            case 3:
+                GameObject instantiated_bomb = GameObject.Instantiate(item_bomb, scaled_coordinates, Quaternion.identity);
+                item_PU_matrix.FindAt(coordinates.x, coordinates.y).Add(instantiated_bomb);
+                break;
+            case 4:
+                GameObject instantiated_shield = GameObject.Instantiate(PU_shield, scaled_coordinates, Quaternion.identity);
+                item_PU_matrix.FindAt(coordinates.x, coordinates.y).Add(instantiated_shield);
+                break;
+            case 5:
+                GameObject instantiated_hiperspeed = GameObject.Instantiate(PU_hiperspeed, scaled_coordinates, Quaternion.identity);
+                item_PU_matrix.FindAt(coordinates.x, coordinates.y).Add(instantiated_hiperspeed);
+                break;
+            default:
+                Debug.Log("AT InstantiateItemPUParticle SHOULDN'T REACH THIS LINE IN SWITCH CASE!!!");
+                break;
+        }
+        
+        //Tells map that a particle has been instantiated.
+        map.FindAt(coordinates.x, coordinates.y).item_PU_particles_instantiated ++;
+
+
+        
+    }
+    private void DeleteItemPUParticle(Point2D coordinates, MapCell current_MC)
+    {
+        // Debug.Log("attempting to delete item/pu at coords (" + coordinates.x + ',' + coordinates.y + ')');
+        //Tells current_MC that the graphics are updated.
+        current_MC.item_PU_particles_instantiated = 0;
+        //Removes all the graphic Items.
+        while (item_PU_matrix.FindAt(coordinates.x, coordinates.y).Size() != 0)
+        {
+            GameObject item_PU_particle = item_PU_matrix.FindAt(coordinates.x, coordinates.y).FindAt(0);
+            Destroy(item_PU_particle);
+            item_PU_matrix.FindAt(coordinates.x, coordinates.y).DeleteAt(0);
+        }
+        
+        // LP_matrix.DeleteAt(coordinates.x, coordinates.y);   //Unnecesary to delete element of the matrix since it is not accesed.
+
+
+    }
+
     public Point2D GetPlayerCoords(int player_ID)
     {
         for (int i = 0; i < m; i++)
@@ -216,12 +332,17 @@ public class GameManagement : MonoBehaviour
                 }
             }
         }
-        Debug.Log("Couldn't find player of ID" + player_ID + "on GetPlayerCoords().");
+        // Debug.Log("Couldn't find player of ID" + player_ID + "on GetPlayerCoords().");
         return new Point2D(-1,-1);
     }
 
     private void BotBehavior(int current_player_ID, bool affect_player_0)
     {
+        if (players[user_player].character_destroyed)
+        {
+            BotBehaviorRandom(current_player_ID);
+            return;
+        }
         if (current_player_ID == user_player & !affect_player_0)
         {
             return;
@@ -245,6 +366,11 @@ public class GameManagement : MonoBehaviour
                     }
                     else
                     {
+                        if (players[1].character_destroyed)
+                        {
+                            BotBehaviorRandom(2);
+                            return;
+                        }
                         BotBehaviorFollow(1, 2, user_player);
                     }
                     return;
@@ -337,11 +463,11 @@ public class GameManagement : MonoBehaviour
         // Helps to avoid LP.
         if (map.FindAt((player_position.x + x_displacement + m)%m, player_position.y).LP >= 1)
         {
-            x_displacement *=-1;
+            x_displacement = 0;
         }
         if (map.FindAt(player_position.x, (player_position.y + y_displacement + n)%n).LP >= 1)
         {
-            y_displacement *=-1;
+            y_displacement = 0;
         }
         players[apply_on].ChangeDirection(x_displacement, y_displacement);
     }
@@ -443,6 +569,57 @@ public class GameManagement : MonoBehaviour
             players[from_player_of_ID].direction %= 4;
         }
     }
+
+    private void SpawnItemsAndPowerUps()
+    {
+        int random_x = UnityEngine.Random.Range(0,m);
+        int random_y = UnityEngine.Random.Range(0,n);
+        int random_item_PU = UnityEngine.Random.Range(1,6);
+        map.FindAt(random_x, random_y).item_PU_IDs.Add(random_item_PU);
+        // Debug.Log("SPAWNED AN ITEM/PU OF INDEX: " + UnityEngine.Random.Range(1,6) + " AT (" + random_x + ',' + random_y + ')');
+    }
+
+    private void PrintLPMatrix()
+    {
+        // Print LP_matrix
+        if (Time.frameCount % 1200 == 0)
+        {
+            string msg = "";
+            for (int i = 0; i < m; i++)
+            {
+                msg = string.Concat(msg, "[");
+                for (int j = 0; j < n; j++)
+                {
+                    msg = string.Concat(msg, " ");
+                    msg = string.Concat(msg, map.FindAt(i,j).LP);
+                    // Debug.Log(map.FindAt(i,j).LP);
+                }
+                msg = string.Concat(msg, "]\n");
+            }
+            Debug.Log(msg);
+        }
+    }
+    private void PrintItemPUMatrix(bool no_timer)
+    {
+        // Print PrintItemPUMatrix
+        if (Time.frameCount % 240 == 0 | no_timer)
+        {
+            string msg = "";
+            for (int i = 0; i < m; i++)
+            {
+                msg = string.Concat(msg, "[");
+                for (int j = 0; j < n; j++)
+                {
+                    msg = string.Concat(msg, " ");
+                    msg = string.Concat(msg, map.FindAt(i,j).item_PU_IDs.Size());
+                }
+                msg = string.Concat(msg, "]\n");
+            }
+            Debug.Log(msg);
+        }
+    }
+
+
     void Start()
     {
         // Draws tiles;
@@ -456,39 +633,37 @@ public class GameManagement : MonoBehaviour
                 current_tile.transform.Rotate(90,0,0);
             }
         }
+
+        //Manually destroy players. Debugging.
+        players[1].Delete();
+        players[2].Delete();
     }    
 
     void Update()
     {
+        Controls();
         UpdatePlayers();
 
-        //Print LP_matrix
-        // if (Time.frameCount % 1200 == 0)
-        // {
-        //     string msg = "";
-        //     for (int i = 0; i < m; i++)
-        //     {
-        //         msg = string.Concat(msg, "[");
-        //         for (int j = 0; j < n; j++)
-        //         {
-        //             msg = string.Concat(msg, " ");
-        //             msg = string.Concat(msg, map.FindAt(i,j).LP);
-        //             // Debug.Log(map.FindAt(i,j).LP);
-        //         }
-        //         msg = string.Concat(msg, "]\n");
-        //     }
-        //     Debug.Log(msg);
-        // }
-        if (Time.frameCount % 240 == 0)
+        // Spawn item/PU.
+        if (spawn_timer < Time.frameCount) // & UnityEngine.Random.Range(0,60) == 1 //Code to add random extra time between spawns.
         {
-            Debug.Log(players[user_player].direction);
-        }
-        
+            SpawnItemsAndPowerUps();
+            spawn_timer += base_spawn_time / m / n;
+            // PrintItemPUMatrix(true);
+        }        
+
+        //Time. Debug.
+        // Debug.Log($"Total frames: {Time.frameCount}" + $"spawn_timer: {spawn_timer}" + $"base_spawn_time / m / n: {base_spawn_time / m / n}");
+        // if (Time.frameCount % 60 == 0)
+        // {
+        //     Debug.Log("60f.");
+        // }
     }
 
-    void FixedUpdate()
+    public void Controls()
     {
         //Grants user control of player 0.
+        //Controls direction.
         int verticalKey = 0;
         float verticalKeyf = Input.GetAxis("Vertical");
         if (verticalKeyf < 0)
@@ -513,9 +688,17 @@ public class GameManagement : MonoBehaviour
 
         if (verticalKey != 0 | horizontalKey != 0)
         {
-            Debug.Log("Enters ChangeDirection with (x,y) = " + horizontalKey + ',' + verticalKey);
+            // Debug.Log("Enters ChangeDirection with (x,y) = " + horizontalKey + ',' + verticalKey);
             players[0].ChangeDirection(horizontalKey, verticalKey);    
         }
+
+        //Uses PU when user presses space key.
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            players[user_player].UsePowerUp();
+            Debug.Log("User used PU. Space key pressed.");
+        }
+
     }
 
 }

@@ -3,21 +3,23 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class HoverEffect : MonoBehaviour
+public class HoverEffect2 : MonoBehaviour
 {
     // private Transform pos; // Reference to player's Rigidbody.
     public float revolutionsPerSecond = 1;
-    public float heightConstant = 2.5f;
-    public float hoveringSpeedConstant = 150;
+    public float heightConstant = 0.5f;
+    public float hoveringSpeedConstant = 200;
     public float dampening = 1;
     public bool local_rotation = false;
     private int phase;
+    private float initial_y;
 
     // Start is called before the first frame update
     private void Start()
     {
         // pos = GetComponent<Transform>(); // Access the object's Transform Component.
         phase = Time.frameCount;
+        initial_y = transform.position.y;
     }
 
     // Update is called once per frame
@@ -25,8 +27,8 @@ public class HoverEffect : MonoBehaviour
     {
         // Hover.
         Vector3 movement = transform.position;
-        double hoverMovement = Math.Cos(hoveringSpeedConstant/10000/dampening* Time.frameCount + phase)*heightConstant*hoveringSpeedConstant/10000/dampening;
-        movement.y += (float)hoverMovement;
+        double hoverMovement = Math.Sin(hoveringSpeedConstant/10000/dampening* Time.frameCount + phase)*heightConstant;
+        movement.y = (float)hoverMovement + initial_y;
         transform.position = movement;
         //Rotation.
         // This method works:

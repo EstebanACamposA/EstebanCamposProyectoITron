@@ -5,10 +5,11 @@ using DataStructures;
 public class Player
 {
     public int player_ID; //Given by Game Manager.
-    public int speed; //Given by Game Manager.  //Must be [1,10]
+    private int speed; //Given by Game Manager.  //Must be [1,10]
+    public int current_speed; //Starts the same as speed. It changes depending on whether hiperspeed is active (> 0).
     public DataStructures.Lists.LinkedList<Point2D> trail = new();  //Built in constructor according to direction and LP_size
     public int direction = 1;  //Starts at 1 (up). //Must be {0,1,2,3}
-    public int LP_size = 4; //Starts at 4. i. e. one for the player and a light path of 3.
+    public int LP_size = 1; //Starts at 4. i. e. one for the player and a light path of 3.
     public float fuel = 100; //Starts at full.
     public DataStructures.Lists.LinkedList<int> items_queue = new();     //Starts empty.
     public DataStructures.Lists.LinkedList<int> power_ups_stack = new(); //Starts empty.
@@ -88,7 +89,7 @@ public class Player
             /// <summary>
             /// This function must be periodically called by Game Manager so that items are spent at a set interval.
             /// </summary>
-    public void UseItem()
+    private void UseItem()
     {
         if (items_queue.Size() >= 1)
         {
@@ -103,7 +104,8 @@ public class Player
                     LP_size += Random.Range(1,4);
                     break;
                 case 3: //Bomb
-                    Debug.Log("FUNCTION TO DESTROY THE PLAYER (BOMB USED) PENDING.");
+                    Debug.Log("Bomb has exploded on player of ID: " + player_ID + ". shield_remaining: " + shield_remaining);
+                    Delete();
                     break;
                 default:
                     break;
@@ -112,19 +114,23 @@ public class Player
     }
     public void UsePowerUp()
     {
-        int power_up_used = power_ups_stack.FindAt(0);
-        power_ups_stack.DeleteAt(0);    //Pops.
-        switch (power_up_used)
+        if (power_ups_stack.Size() >= 1)
         {
-            case 4: //Shield
-                shield_remaining = Random.Range(60,300);    //Time in frames
-                break;
-            case 5: //Hiperspeed
-                hiperspeed_remaining = Random.Range(60,180);    //Time in frames
-                break;
-            default:
-                break;
+            int power_up_used = power_ups_stack.FindAt(0);
+            power_ups_stack.DeleteAt(0);    //Pops.
+            switch (power_up_used)
+            {
+                case 4: //Shield
+                    shield_remaining = Random.Range(60,300);    //Time in frames
+                    break;
+                case 5: //Hiperspeed
+                    hiperspeed_remaining = Random.Range(60,180);    //Time in frames
+                    break;
+                default:
+                    break;
+            }
         }
+
     }
     public void GiveItemOrPU(int item_PU_ID)
     {
@@ -252,6 +258,14 @@ public class Player
             }
             trail.Delete();
         }
+        if (hiperspeed_remaining > 0)
+        {
+            current_speed = speed*30 + 5;    //Change speed multiplier for something reasonable.
+        }
+        else
+        {
+            current_speed = speed;
+        }
     }
 
     public void UpdatePowerUps()
@@ -261,6 +275,7 @@ public class Player
         if (item_timer <= 0)
         {
             UseItem();
+            item_timer += 90;
         }
         item_timer --;
     }
@@ -270,9 +285,19 @@ public class Player
 
     public void Delete()
     {
+        if (shield_remaining > 0)
+        {
+            Debug.Log("Player " + player_ID + " has been saved by a shield! ♥");
+            return;    
+        }
         Debug.Log("DELETE PLAYER WITH ID: " + player_ID);   //CODE FOR DELETING PLAYERS PENDING HERE!!!
         LP_size = 0;
         character_destroyed = true;
+        // Erases head.
+        Point2D player_ID_to_delete_from_matrix = trail.FindAt(0);
+        map.FindAt(player_ID_to_delete_from_matrix.x, player_ID_to_delete_from_matrix.y).player_IDs.DeleteValue(player_ID);
+        trail.DeleteAt(0);
+
     }
 }
 
