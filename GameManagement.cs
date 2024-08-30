@@ -5,7 +5,7 @@ using DataStructures.Lists;
 using Unity.VisualScripting;
 using UnityEditor.Experimental.GraphView;
 using System;
-
+using TMPro;
 // using myUnityScripts;
 
 public class GameManagement : MonoBehaviour
@@ -20,6 +20,11 @@ public class GameManagement : MonoBehaviour
     public int user_player = 0;
     public int base_spawn_time = 21600;   //Time between spawns per cell.    //Underscore is ignored (e.g 500_000).
     private int spawn_timer = 240;  //First item spawn in frames.
+    public int max_items = 6;
+    public int max_PU = 6;
+    // Controller related variables.
+    private int current_horizontal_key = 0;
+    private int current_vertical_key = 0;
     public DataStructures.Lists.MatrixLinkedList<MapCell> map;
     // Graphics related variables.
     public GameObject light_path_particle;
@@ -36,7 +41,17 @@ public class GameManagement : MonoBehaviour
     public int base_y = 0;
     private DataStructures.Lists.MatrixLinkedList<GameObject> LP_matrix;
     private DataStructures.Lists.MatrixLinkedList<LinkedList<GameObject>> item_PU_matrix;
-
+    // UI Related variables.
+    public Canvas canvas;
+    public GameObject fuel_textbox;
+    public int fuel_textbox_add_fuel_timer = -1;
+    public GameObject fuel_cell_image;
+    public GameObject LP_size_increase_image;
+    public GameObject bomb_image;
+    public GameObject shield_image;
+    public GameObject hspeed_image;
+    private DataStructures.Lists.LinkedList<LinkedList<GameObject>> UI_item_list;
+    private DataStructures.Lists.LinkedList<LinkedList<GameObject>> UI_PU_list;
     private void Awake()
     {
         Debug.Log("HAS ENTERED AWAKE FUNCTION IN THE GAME MANAGER.");
@@ -74,16 +89,16 @@ public class GameManagement : MonoBehaviour
             int x_of_new_player = m/playerCount*i;
             int y_of_new_player = n/2 + 3;
             Point2D coords_of_new_player = new(x_of_new_player, y_of_new_player);
-            int SPEEDdELETETHIS = 5;   //others
+            int SPEEDdELETETHIS = 9;   //others
             if (i == 0)
             {
-                SPEEDdELETETHIS = 3;   //player 0
+                SPEEDdELETETHIS = 20;   //player 0
             }
-            players[i] = new Player(i, coords_of_new_player, SPEEDdELETETHIS, map);   //  ----!!!!!!!!!!!!speed SHOULD BE Random.Range(1,11), NOT 3!!!!!!!!!!!!----
+            players[i] = new Player(i, coords_of_new_player, SPEEDdELETETHIS, map, max_items, max_PU);   //  ----!!!!!!!!!!!!speed SHOULD BE Random.Range(1,11), NOT 3!!!!!!!!!!!!----
         }
 
 
-        // Creates graphic maps
+        // Creates graphic maps.
         LP_matrix = new(m,n);
         item_PU_matrix = new(m,n);
         for (int i = 0; i < m; i++)
@@ -94,6 +109,53 @@ public class GameManagement : MonoBehaviour
                 item_PU_matrix.SetAt(item_PU_list, i, j);
             }
         }
+        // Creates UI lists.
+        GameObject[] items_images_array = new GameObject[3];
+        items_images_array[0] = fuel_cell_image;
+        items_images_array[1] = LP_size_increase_image;
+        items_images_array[2] = bomb_image;
+
+        GameObject[] PU_images_array = new GameObject[2];
+        PU_images_array[0] = shield_image;
+        PU_images_array[1] = hspeed_image;
+
+        UnityEngine.UI.Image sprite;
+        UI_item_list = new();
+        for (int i = 0; i < max_items; i++)
+        {
+            
+            DataStructures.Lists.LinkedList<GameObject> items_image_list = new();
+            for (int j = 0; j < items_images_array.Length; j++)
+            {
+                GameObject instantiated_image = Instantiate(items_images_array[j], canvas.transform);
+                sprite = instantiated_image.GetComponent<UnityEngine.UI.Image>();
+                sprite.enabled = false;
+                RectTransform rectTransform = instantiated_image.GetComponent<RectTransform>();
+                rectTransform.anchoredPosition = new Vector2(0, -100*i-75);
+                // rectTransform.sizeDelta = new Vector2(100, 100);
+                items_image_list.Add(instantiated_image);
+            }   
+            UI_item_list.Add(items_image_list);
+        }
+
+        UI_PU_list = new();
+        for (int i = 0; i < max_PU; i++)
+        {
+            
+            DataStructures.Lists.LinkedList<GameObject> PU_image_list = new();
+            for (int j = 0; j < PU_images_array.Length; j++)
+            {
+                GameObject instantiated_image = Instantiate(PU_images_array[j], canvas.transform);
+                sprite = instantiated_image.GetComponent<UnityEngine.UI.Image>();
+                sprite.enabled = false;
+                RectTransform rectTransform = instantiated_image.GetComponent<RectTransform>();
+                rectTransform.anchoredPosition = new Vector2(-100*i-75, -525);
+                // rectTransform.sizeDelta = new Vector2(100, 100);
+                PU_image_list.Add(instantiated_image);
+            }   
+            UI_PU_list.Add(PU_image_list);
+        }
+
 
         //Sets max fps to 60.
         Application.targetFrameRate = 60;
@@ -119,6 +181,7 @@ public class GameManagement : MonoBehaviour
                 // Updates player and then map only when is their turn.
                 BotBehavior(i, false);
                 players[i].Update();
+                UpdateUIFuel();
                 turns[i] += 120/players[i].current_speed;   // frecuency = 1/2 * speed in steps/second.
                 UpdateMap();
             }
@@ -148,11 +211,12 @@ public class GameManagement : MonoBehaviour
                 //Checks for a single player collision with LP or items.
                 if (player_count == 1)
                 {
+                    Player current_player = players[current_MC.player_IDs.FindAt(0)];
                     //Checks for a single player collision with LP.
                     if (current_MC.LP >= 1)
                     {
                         Debug.Log("Deleting player of ID: " + current_MC.player_IDs.FindAt(0));
-                        players[current_MC.player_IDs.FindAt(0)].Delete();
+                        current_player.Delete();
                     }
                     //Checks for player collision with items.
                     // int item_PU_IDs_size = current_MC.item_PU_IDs.Size();
@@ -166,7 +230,7 @@ public class GameManagement : MonoBehaviour
                     // }
                     while (current_MC.item_PU_IDs.Size() != 0)
                     {
-                        players[current_MC.player_IDs.FindAt(0)].GiveItemOrPU(current_MC.item_PU_IDs.FindAt(0));
+                        current_player.GiveItemOrPU(current_MC.item_PU_IDs.FindAt(0));
                         current_MC.item_PU_IDs.DeleteAt(0);
                     }
                 }
@@ -257,7 +321,7 @@ public class GameManagement : MonoBehaviour
         Vector3 scaled_coordinates = new(coordinates.x, base_y, coordinates.y);
         scaled_coordinates *= map_scale;
         scaled_coordinates.y = base_y;
-        
+
         //Stores particle GameObject in item_PU_matrix for future removal.
         // Debug.Log("attempting to instantiate ITEM/PU particle at coords (" + coordinates.x + ',' + coordinates.y + ')');
         if (item_PU_matrix.FindAt(coordinates.x, coordinates.y) == null)
@@ -579,6 +643,116 @@ public class GameManagement : MonoBehaviour
         // Debug.Log("SPAWNED AN ITEM/PU OF INDEX: " + UnityEngine.Random.Range(1,6) + " AT (" + random_x + ',' + random_y + ')');
     }
 
+
+    private void UpdateUI(int target_player)
+    {
+        Player player = players[target_player];
+        LinkedList<int> items_queue = player.items_queue;
+        LinkedList<int> PU_stack = player.power_ups_stack;
+        if (!player.UI_is_updated)
+        {
+            //Updates Item Queue UI.
+            //Turns on respective images.
+            for (int i = 0; i < items_queue.Size(); i++)
+            {
+                //Turns on respective image.
+                int item_ID = items_queue.FindAt(i);
+                for (int j = 0; j < 3; j++)
+                {
+                    // Debug.Log("Enters 'Turns on respective image' with i,j = " + i + "," + j);
+
+                    if (item_ID == j+1) //Ads 1 because items ID go from 1 to 5, not 0 to 4.
+                    {
+                        UI_item_list.FindAt(i).FindAt(j).GetComponent<UnityEngine.UI.Image>().enabled = true;
+                    }
+                    else
+                    {
+                        UI_item_list.FindAt(i).FindAt(j).GetComponent<UnityEngine.UI.Image>().enabled = false;
+                    }
+                }
+            }
+            //Turns off images of empty slots.
+            for (int i = items_queue.Size(); i < max_items; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {   
+                    if (UI_item_list.FindAt(i) == null)
+                    {
+                        Debug.Log("UI_item_list.FindAt(i) == null. i = " + i);
+                    }
+                    if (UI_item_list.FindAt(i).FindAt(j) == null)
+                    {
+                        Debug.Log("UI_item_list.FindAt(i).FindAt(j) == null. i = " + i + ". j = " + j);
+                    }
+                    UI_item_list.FindAt(i).FindAt(j).GetComponent<UnityEngine.UI.Image>().enabled = false;
+                }
+            }
+
+
+            //Updates PU Stack UI.
+            //Turns on respective images.
+            for (int i = 0; i < PU_stack.Size(); i++)
+            {
+                //Turns on respective image.
+                int PU_ID = PU_stack.FindAt(i);
+                for (int j = 0; j < 2; j++)     //  SUBTRACT NUMBER OF ITEMS???????
+                {
+                    // Debug.Log("Enters 'Turns on respective image' with i,j = " + i + "," + j);
+
+                    if (PU_ID == j + 3 + 1) //Ads 1 because items ID go from 1 to 5, not 0 to 4.
+                    {
+                        UI_PU_list.FindAt(i).FindAt(j).GetComponent<UnityEngine.UI.Image>().enabled = true;
+                    }
+                    else
+                    {
+                        UI_PU_list.FindAt(i).FindAt(j).GetComponent<UnityEngine.UI.Image>().enabled = false;
+                    }
+                }
+            }
+            //Turns off images of empty slots.
+            for (int i = PU_stack.Size(); i < max_PU; i++)
+            {
+                for (int j = 0; j < 2; j++)
+                {   
+                    if (UI_PU_list.FindAt(i) == null)
+                    {
+                        Debug.Log("UI_PU_list.FindAt(i) == null. i = " + i);
+                    }
+                    if (UI_PU_list.FindAt(i).FindAt(j) == null)
+                    {
+                        Debug.Log("UI_PU_list.FindAt(i).FindAt(j) == null. i = " + i + ". j = " + j);
+                    }
+                    UI_PU_list.FindAt(i).FindAt(j).GetComponent<UnityEngine.UI.Image>().enabled = false;
+                }
+            }
+
+
+            player.UI_is_updated = true;
+        }
+        fuel_textbox_add_fuel_timer --; // Any better place to put this? Must run once per frame.
+
+    }
+    private void UpdateUIFuel()
+    {
+        //Updates fuel_textbox.
+        // if (fuel_textbox.GetComponent<TextMeshProUGUI>() == null)
+        // {
+        //     Debug.Log("fuel_textbox.GetComponent<TextMeshProUGUI>() == null!!!!!!!!!");
+        // }
+        Player current_player = players[user_player];
+        if (current_player.character_destroyed)
+        {
+            fuel_textbox.GetComponent<TextMeshProUGUI>().text = "";
+            return;    
+        }
+        string extra_fuel_msg = "";
+        if (fuel_textbox_add_fuel_timer > 0)
+        {
+            extra_fuel_msg = " + " + current_player.last_fuel_increase.ToString();
+        }
+        fuel_textbox.GetComponent<TextMeshProUGUI>().text = ((int)current_player.fuel).ToString() + extra_fuel_msg;
+    }
+
     private void PrintLPMatrix()
     {
         // Print LP_matrix
@@ -643,6 +817,7 @@ public class GameManagement : MonoBehaviour
     {
         Controls();
         UpdatePlayers();
+        UpdateUI(user_player);
 
         // Spawn item/PU.
         if (spawn_timer < Time.frameCount) // & UnityEngine.Random.Range(0,60) == 1 //Code to add random extra time between spawns.
@@ -664,32 +839,48 @@ public class GameManagement : MonoBehaviour
     {
         //Grants user control of player 0.
         //Controls direction.
-        int verticalKey = 0;
-        float verticalKeyf = Input.GetAxis("Vertical");
-        if (verticalKeyf < 0)
+        
+        //Makes quick presses linger until player moves. (1)
+        if (players[user_player].has_moved)
         {
-            verticalKey = -1;
+            current_horizontal_key = 0;
+            current_vertical_key = 0;
         }
-        if (verticalKeyf > 0)
+
+        int verticalKey = current_vertical_key;
+        if (Input.GetKey(KeyCode.W) | Input.GetKey(KeyCode.UpArrow))
         {
             verticalKey = 1;
         }
-        
-        int horizontalKey = 0;
-        float horizontalKeyf = Input.GetAxis("Horizontal");
-        if (horizontalKeyf < 0)
+        if (Input.GetKey(KeyCode.S) | Input.GetKey(KeyCode.DownArrow))
         {
-            horizontalKey = -1;
+            verticalKey = -1;
         }
-        if (horizontalKeyf > 0)
+        int horizontalKey = current_horizontal_key;
+        if (Input.GetKey(KeyCode.D) | Input.GetKey(KeyCode.RightArrow))
         {
             horizontalKey = 1;
         }
+        if (Input.GetKey(KeyCode.A) | Input.GetKey(KeyCode.LeftArrow))
+        {
+            horizontalKey = -1;
+        }
 
+        //Makes quick presses linger until player moves. (2)
+        if (verticalKey != 0)
+        {
+            current_vertical_key = verticalKey;
+        }
+        if (horizontalKey != 0)
+        {
+            current_horizontal_key = horizontalKey;
+        }
+        
         if (verticalKey != 0 | horizontalKey != 0)
         {
             // Debug.Log("Enters ChangeDirection with (x,y) = " + horizontalKey + ',' + verticalKey);
-            players[0].ChangeDirection(horizontalKey, verticalKey);    
+            players[user_player].ChangeDirection(horizontalKey, verticalKey);
+            players[user_player].has_moved = false;
         }
 
         //Uses PU when user presses space key.

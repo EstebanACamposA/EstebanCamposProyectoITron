@@ -1,5 +1,6 @@
 using UnityEngine;
 using DataStructures;
+using Unity.VisualScripting;
 // using System.Diagnostics;
 
 public class Player
@@ -18,6 +19,11 @@ public class Player
     public DataStructures.Lists.MatrixLinkedList<MapCell> map;  //Game Manager gives access to the map to the Player objects.
     private int item_timer = 90;
     public bool character_destroyed = false;
+    private int max_items = 6;
+    private int max_PU = 6;
+    public bool UI_is_updated = false;
+    public bool has_moved = true;   //Accesed by GameManagement.Control(). Set false when a key is down. Set true on Update. 
+    public int last_fuel_increase = 0;  //Accesed By UpdateUIFuel. Decreased by main Update function each frame.
 
     //Movement information. Used to decide direction when multiple wasd keys are pressed. true for vertical; false for horizontal.
     private bool previous_direction = true;
@@ -44,11 +50,13 @@ public class Player
     //         }
     // }
 
-    public Player(int player_ID, Point2D startingCoords, int speed, DataStructures.Lists.MatrixLinkedList<MapCell> map)
+    public Player(int player_ID, Point2D startingCoords, int speed, DataStructures.Lists.MatrixLinkedList<MapCell> map, int max_items, int max_PU)
     {
         this.player_ID = player_ID;
         this.speed = speed;
         this.map = map;
+        this.max_items = max_items;
+        this.max_PU = max_PU;
 
         int x_to_add = 0;
         int y_to_add = 0;
@@ -95,10 +103,13 @@ public class Player
         {
             int item_used = items_queue.FindAt(0);
             items_queue.DeleteAt(0);    //Dequeues.
+            UI_is_updated = false;
             switch (item_used)
             {
                 case 1: //Fuel
-                    fuel += Random.Range(1, 21);
+                    last_fuel_increase = Random.Range(1, 21);
+                    fuel += last_fuel_increase;
+                    GameManagement.Instance.fuel_textbox_add_fuel_timer = 30;
                     break;
                 case 2: //LP size increase
                     LP_size += Random.Range(1,4);
@@ -116,8 +127,9 @@ public class Player
     {
         if (power_ups_stack.Size() >= 1)
         {
-            int power_up_used = power_ups_stack.FindAt(0);
-            power_ups_stack.DeleteAt(0);    //Pops.
+            int power_up_used = power_ups_stack.FindLast();
+            power_ups_stack.Delete();    //Pops.
+            UI_is_updated = false;
             switch (power_up_used)
             {
                 case 4: //Shield
@@ -137,19 +149,39 @@ public class Player
         switch (item_PU_ID)
         {
             case 1: //Fuel
-                items_queue.AddAt(item_PU_ID, 0);
+                if (items_queue.Size() < max_items)
+                {
+                    items_queue.AddAt(item_PU_ID, 0);
+                    UI_is_updated = false;
+                }
                 break;
             case 2: //LP size increase
-                items_queue.Add(item_PU_ID);
+                if (items_queue.Size() < max_items)
+                {
+                    items_queue.Add(item_PU_ID);
+                    UI_is_updated = false;
+                }
                 break;
             case 3: //Bomb
-                items_queue.Add(item_PU_ID);
+                if (items_queue.Size() < max_items)
+                {
+                    items_queue.Add(item_PU_ID);
+                    UI_is_updated = false;
+                }
                 break;
             case 4: //Shield
-                power_ups_stack.AddAt(item_PU_ID, 0);
+                if (power_ups_stack.Size() < max_PU)
+                {
+                    power_ups_stack.Add(item_PU_ID);    
+                    UI_is_updated = false;
+                }
                 break;
             case 5: //Hiperspeed
-                power_ups_stack.AddAt(item_PU_ID, 0);
+                if (power_ups_stack.Size() < max_PU)
+                {
+                    power_ups_stack.Add(item_PU_ID);    
+                    UI_is_updated = false;
+                }
                 break;
             default:
                 break;
@@ -191,9 +223,14 @@ public class Player
             /// <summary>
             /// Moves player one cell. The rate at which this function is called must depend on speed.
             /// </summary>
-    public void Update()
+    public void Update()    //This is not Unity's Update()
     {   
         fuel -= 0.2f;   //CHECK IF FUEL IS LESS THAN 0.2 TO DESTROY PLAYER. THIS CODE IS NOT COMPLETE.
+        if (fuel < 0.2f & !character_destroyed)
+        {
+            Debug.Log("Player " + player_ID + " has run out of fuel!");
+            Delete();
+        }
         if (!character_destroyed)
         {
             
@@ -239,6 +276,8 @@ public class Player
             map.FindAt(current_head.x, current_head.y).LP += 1;
             map.FindAt(current_head.x, current_head.y).LP_direction = direction;
             map.FindAt(current_head.x, current_head.y).LP_particle_is_instantiated = false;
+
+            has_moved = true;
         }
         // Deletes oldest LP if LP_size has been reached.
         if (trail.Size() > LP_size)
@@ -277,7 +316,10 @@ public class Player
             UseItem();
             item_timer += 90;
         }
-        item_timer --;
+        if (items_queue.Size() >= 1)
+        {
+            item_timer --;    
+        }
     }
 
 
@@ -285,18 +327,26 @@ public class Player
 
     public void Delete()
     {
-        if (shield_remaining > 0)
+        if (!character_destroyed)   //THIS IS REDUNDANTLY VALIDATED IN OTHER PLACES!!!!!!
         {
-            Debug.Log("Player " + player_ID + " has been saved by a shield! ♥");
-            return;    
+            if (shield_remaining > 0)
+            {
+                if (fuel > 0.2)
+                {
+                    Debug.Log("Player " + player_ID + " has been saved by a shield! ♥");
+                    return;    
+                }
+                Debug.Log("A shield won't protect Player " + player_ID + " from low fuel :(");
+            }
+            Debug.Log("Delete player of ID: " + player_ID);
+            LP_size = 0;
+            character_destroyed = true;
+            // Erases head.
+            Point2D player_ID_to_delete_from_matrix = trail.FindAt(0);
+            map.FindAt(player_ID_to_delete_from_matrix.x, player_ID_to_delete_from_matrix.y).player_IDs.DeleteValue(player_ID);
+            trail.DeleteAt(0);    
         }
-        Debug.Log("DELETE PLAYER WITH ID: " + player_ID);   //CODE FOR DELETING PLAYERS PENDING HERE!!!
-        LP_size = 0;
-        character_destroyed = true;
-        // Erases head.
-        Point2D player_ID_to_delete_from_matrix = trail.FindAt(0);
-        map.FindAt(player_ID_to_delete_from_matrix.x, player_ID_to_delete_from_matrix.y).player_IDs.DeleteValue(player_ID);
-        trail.DeleteAt(0);
+        
 
     }
 }
