@@ -22,6 +22,10 @@ public class GameManagement : MonoBehaviour
     private int spawn_timer = 240;  //First item spawn in frames.
     public int max_items = 6;
     public int max_PU = 6;
+    public int max_shield = 360; // Maximum duration of shield PU in frames.
+    public int min_shield = 60; // Min duration of shield PU in frames.
+    public int max_hyperspeed = 360; // Maximum duration of hyperspeed PU in frames.
+    public int min_hyperspeed = 360; // Min duration of hyperspeed PU in frames.
     // Controller related variables.
     private int current_horizontal_key = 0;
     private int current_vertical_key = 0;
@@ -33,12 +37,15 @@ public class GameManagement : MonoBehaviour
     public GameObject item_LP_size_increase;
     public GameObject item_bomb;
     public GameObject PU_shield;
-    public GameObject PU_hiperspeed;
+    public GameObject PU_hyperspeed;
 
     public GameObject tile;
+    public GameObject Bike;
     
     public int map_scale = 2;
     public int base_y = 0;
+    public GameObject floor;
+    public GameObject main_camera;
     private DataStructures.Lists.MatrixLinkedList<GameObject> LP_matrix;
     private DataStructures.Lists.MatrixLinkedList<LinkedList<GameObject>> item_PU_matrix;
     // UI Related variables.
@@ -82,19 +89,26 @@ public class GameManagement : MonoBehaviour
         turns = new int[playerCount];
         players = new Player[playerCount];
 
-        // Creates players.
+        // Creates players in the program and instantiates the visible players. 
         for (int i = 0; i < playerCount; i++)
         {
+            //Player object creation.
             turns[i] = i*60;    // Delay at the start of the game for each player to start based on their ID. Player 0 is the user and has no delay.
             int x_of_new_player = m/playerCount*i;
             int y_of_new_player = n/2 + 3;
             Point2D coords_of_new_player = new(x_of_new_player, y_of_new_player);
-            int SPEEDdELETETHIS = 9;   //others
+            int SPEEDdELETETHIS = 9;   //others DEBUG
             if (i == 0)
             {
-                SPEEDdELETETHIS = 20;   //player 0
+                SPEEDdELETETHIS = 9;   //player 0 DEBUG
             }
             players[i] = new Player(i, coords_of_new_player, SPEEDdELETETHIS, map, max_items, max_PU);   //  ----!!!!!!!!!!!!speed SHOULD BE Random.Range(1,11), NOT 3!!!!!!!!!!!!----
+        
+            //Visible player instantiation.
+            GameObject new_bike = Instantiate(Bike);    // Visible player control their own position and rotation.
+            GoToPlayer new_bike_script = new_bike.GetComponent<GoToPlayer>();
+            new_bike_script.player_ID = i;
+            new_bike_script.y = base_y;
         }
 
 
@@ -179,9 +193,24 @@ public class GameManagement : MonoBehaviour
             if (turns[i] < Time.frameCount)
             {
                 // Updates player and then map only when is their turn.
+
+                // Debug prints
+                // if (i == 0)
+                // {
+                //     Debug.Log("Player " + i + "s turn" + "\n" + "players[i].LP_size = " + players[i].LP_size + "\n" + "players[i].trail.Size() = " + players[i].trail.Size());
+                //     PrintLPMatrixOnce();
+                // }
+                
+                if (i != user_player)
+                {
+                    if (UnityEngine.Random.Range(0,6-players[i].power_ups_stack.Size()) == 0) // Bots are more likely to use PU the more they have.
+                    {
+                        players[i].UsePowerUp();
+                    }
+                }
                 BotBehavior(i, false);
                 players[i].Update();
-                UpdateUIFuel();
+                UpdateUIFuel(); // Move this after UpdateMap ?????????
                 turns[i] += 120/players[i].current_speed;   // frecuency = 1/2 * speed in steps/second.
                 UpdateMap();
             }
@@ -290,7 +319,7 @@ public class GameManagement : MonoBehaviour
         //Tells map that particle has been instantiated.
         map.FindAt(coordinates.x, coordinates.y).LP_particle_is_instantiated = true;
         //Rotates particle.
-        instantiated.GetComponent<ParticleSystem>().transform.Rotate(0, 90*direction, 0);
+        instantiated.GetComponent<ParticleSystem>().transform.Rotate(0, -90*direction, 0);
 
         //If there were already an LP particle it must be overwritten.
         GameObject particle_at_postition = LP_matrix.FindAt(coordinates.x, coordinates.y);
@@ -347,8 +376,8 @@ public class GameManagement : MonoBehaviour
                 item_PU_matrix.FindAt(coordinates.x, coordinates.y).Add(instantiated_shield);
                 break;
             case 5:
-                GameObject instantiated_hiperspeed = GameObject.Instantiate(PU_hiperspeed, scaled_coordinates, Quaternion.identity);
-                item_PU_matrix.FindAt(coordinates.x, coordinates.y).Add(instantiated_hiperspeed);
+                GameObject instantiated_hyperspeed = GameObject.Instantiate(PU_hyperspeed, scaled_coordinates, Quaternion.identity);
+                item_PU_matrix.FindAt(coordinates.x, coordinates.y).Add(instantiated_hyperspeed);
                 break;
             default:
                 Debug.Log("AT InstantiateItemPUParticle SHOULDN'T REACH THIS LINE IN SWITCH CASE!!!");
@@ -399,7 +428,20 @@ public class GameManagement : MonoBehaviour
         // Debug.Log("Couldn't find player of ID" + player_ID + "on GetPlayerCoords().");
         return new Point2D(-1,-1);
     }
-
+    /// <summary>
+    /// x = shield_remaining; y = hyperspeed_remaining.
+    /// </summary>
+    public Point2D GetPlayerShieldAndHyperspeed(int player_ID)
+    {
+        // Debug.Log("At GetPlayerShieldAndHyperspeed player_ID = " + player_ID);
+        int x = players[player_ID].shield_remaining;
+        int y = players[player_ID].hyperspeed_remaining;
+        return new Point2D(x,y);
+    }
+    public Player GetPlayer(int player_ID)
+    {
+        return players[player_ID];
+    }
     private void BotBehavior(int current_player_ID, bool affect_player_0)
     {
         if (players[user_player].character_destroyed)
@@ -547,10 +589,12 @@ public class GameManagement : MonoBehaviour
         {
             for (int j = 0; j < n; j++)
             {
-                if (map.FindAt(i,j).item_PU_IDs.Size() >= 1)
+                if (map.FindAt(i,j).item_PU_IDs.Size() >= 1 && map.FindAt(i,j).item_PU_IDs.FindAt(0) != 3)
+                //Second condition is validated only if first condition is true. Otherwise it crashes when finding an element in an empty list.
+                //Second condition prevents bot from picking bombs when the bomb is in the first place of the list (most cases).
                 {
-                    //Gets displacement necesary to reach the user from the player's (bot's) position.
-                    Point2D item_position = new(i,j);   //This crashes if the user's players is destroyed (loses). SHOULD BOTBEHAVIORS BE DISABLED WHEN PLAYER LOSES?
+                    //Gets displacement necesary to reach the nearest item/PU from the player's (bot's) position.
+                    Point2D item_position = new(i,j);
                     int x_displacement = item_position.x - player_position.x;
                     int y_displacement = item_position.y - player_position.y;
                     //Accounts for map cyclical movement.
@@ -571,7 +615,7 @@ public class GameManagement : MonoBehaviour
                     {
                         y_displacement += n;
                     }
-                    //Gets square distance to object
+                    //Gets square distance to object. Keeps it if is the new minimum distance.
                     int square_distance = (int)Math.Pow(x_displacement,2) + (int)Math.Pow(y_displacement,2);
                     if (square_distance < min_square_distance)
                     {
@@ -622,6 +666,16 @@ public class GameManagement : MonoBehaviour
                 y_displacement = 1;
             }
 
+            // Helps to avoid LP.
+            if (map.FindAt((player_position.x + x_displacement + m)%m, player_position.y).LP >= 1)
+            {
+                x_displacement = 0;
+            }
+            if (map.FindAt(player_position.x, (player_position.y + y_displacement + n)%n).LP >= 1)
+            {
+                y_displacement = 0;
+            }
+
             players[from_player_of_ID].ChangeDirection(x_displacement, y_displacement);
         }
     }
@@ -640,7 +694,20 @@ public class GameManagement : MonoBehaviour
         int random_y = UnityEngine.Random.Range(0,n);
         int random_item_PU = UnityEngine.Random.Range(1,6);
         map.FindAt(random_x, random_y).item_PU_IDs.Add(random_item_PU);
-        // Debug.Log("SPAWNED AN ITEM/PU OF INDEX: " + UnityEngine.Random.Range(1,6) + " AT (" + random_x + ',' + random_y + ')');
+        // Debug.Log("SPAWNED AN ITEM/PU OF INDEX: " + random_item_PU + " AT (" + random_x + ',' + random_y + ')');
+    }
+    public void SpawnDroppedItemsAndPowerUps(LinkedList<int> items_or_PU_list)
+    {
+        int initial_size = items_or_PU_list.Size();
+        for (int i = 0; i < initial_size; i++)
+        {
+            int random_x = UnityEngine.Random.Range(0,m);
+            int random_y = UnityEngine.Random.Range(0,n);
+            int current_item_PU = items_or_PU_list.FindAt(0);
+            items_or_PU_list.DeleteAt(0);
+            map.FindAt(random_x, random_y).item_PU_IDs.Add(current_item_PU); 
+        }
+        // Debug.Log("SPAWNED AN ITEM/PU OF INDEX: " + current_item_PU = items_or_PU_list.FindAt(0); + " AT (" + random_x + ',' + random_y + ')');
     }
 
 
@@ -756,7 +823,7 @@ public class GameManagement : MonoBehaviour
     private void PrintLPMatrix()
     {
         // Print LP_matrix
-        if (Time.frameCount % 1200 == 0)
+        if (Time.frameCount % 180 == 0)
         {
             string msg = "";
             for (int i = 0; i < m; i++)
@@ -772,6 +839,23 @@ public class GameManagement : MonoBehaviour
             }
             Debug.Log(msg);
         }
+    }
+    private void PrintLPMatrixOnce()
+    {
+        // Print LP_matrix
+            string msg = "";
+            for (int i = 0; i < m; i++)
+            {
+                msg = string.Concat(msg, "[");
+                for (int j = 0; j < n; j++)
+                {
+                    msg = string.Concat(msg, " ");
+                    msg = string.Concat(msg, map.FindAt(i,j).LP);
+                    // Debug.Log(map.FindAt(i,j).LP);
+                }
+                msg = string.Concat(msg, "]\n");
+            }
+            Debug.Log(msg);
     }
     private void PrintItemPUMatrix(bool no_timer)
     {
@@ -807,10 +891,21 @@ public class GameManagement : MonoBehaviour
                 current_tile.transform.Rotate(90,0,0);
             }
         }
+        // Instantiates the BackGround.
+        Vector3 scene_center = new(m/2*map_scale, base_y - 5, n/2*map_scale);
+        GameObject bg = Instantiate(floor, scene_center, Quaternion.identity);
+        Vector3 resize = new(m*map_scale*3/2, 1, n*map_scale*3/2);
+        bg.transform.localScale = resize;
+        // Repositions the main camera.
+        scene_center.y = n*10;
+        main_camera.transform.position = scene_center;
 
         //Manually destroy players. Debugging.
-        players[1].Delete();
-        players[2].Delete();
+        // players[0].Delete();
+        // players[1].Delete();
+        // players[2].Delete();
+        // players[3].Delete();
+        // players[4].Delete();
     }    
 
     void Update()
@@ -818,6 +913,7 @@ public class GameManagement : MonoBehaviour
         Controls();
         UpdatePlayers();
         UpdateUI(user_player);
+        // PrintLPMatrix();
 
         // Spawn item/PU.
         if (spawn_timer < Time.frameCount) // & UnityEngine.Random.Range(0,60) == 1 //Code to add random extra time between spawns.
@@ -888,6 +984,18 @@ public class GameManagement : MonoBehaviour
         {
             players[user_player].UsePowerUp();
             Debug.Log("User used PU. Space key pressed.");
+        }
+
+        //Rotates PU with Q and E keys.
+        if (Input.GetKeyDown(KeyCode.Q) | Input.GetKeyDown(KeyCode.Alpha1))
+        {
+            players[user_player].RotatePULeft();
+            Debug.Log("RotatePowerPULeft()");
+        }
+        if (Input.GetKeyDown(KeyCode.E) | Input.GetKeyDown(KeyCode.Alpha2))
+        {
+            players[user_player].RotatePURight();
+            Debug.Log("RotatePowerPURight()");
         }
 
     }

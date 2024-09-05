@@ -1,21 +1,23 @@
 using UnityEngine;
 using DataStructures;
 using Unity.VisualScripting;
+using System.Data.Common;
+using JetBrains.Annotations;
 // using System.Diagnostics;
 
 public class Player
 {
     public int player_ID; //Given by Game Manager.
     private int speed; //Given by Game Manager.  //Must be [1,10]
-    public int current_speed; //Starts the same as speed. It changes depending on whether hiperspeed is active (> 0).
+    public int current_speed; //Starts the same as speed. It changes depending on whether hyperspeed is active (> 0).
     public DataStructures.Lists.LinkedList<Point2D> trail = new();  //Built in constructor according to direction and LP_size
     public int direction = 1;  //Starts at 1 (up). //Must be {0,1,2,3}
-    public int LP_size = 1; //Starts at 4. i. e. one for the player and a light path of 3.
-    public float fuel = 100; //Starts at full.
+    public int LP_size = 4; //Starts at 4. i. e. one for the player and a light path of 3.
+    public float fuel = 100; //Starts at full. THIS SHOULD BE 100 CHANGE FOR DEBUGGING!!!
     public DataStructures.Lists.LinkedList<int> items_queue = new();     //Starts empty.
     public DataStructures.Lists.LinkedList<int> power_ups_stack = new(); //Starts empty.
     public int shield_remaining = 0;      //Starts at 0.  //Set by power ups.   //Timer set on this.usePowerUp; decreased by UpdatePowerUps.
-    public int hiperspeed_remaining = 0;  //Starts at 0.  //Set by power ups.   //Timer set on this.usePowerUp; decreased by UpdatePowerUps.
+    public int hyperspeed_remaining = 0;  //Starts at 0.  //Set by power ups.   //Timer set on this.usePowerUp; decreased by UpdatePowerUps.
     public DataStructures.Lists.MatrixLinkedList<MapCell> map;  //Game Manager gives access to the map to the Player objects.
     private int item_timer = 90;
     public bool character_destroyed = false;
@@ -54,6 +56,7 @@ public class Player
     {
         this.player_ID = player_ID;
         this.speed = speed;
+        current_speed = speed;
         this.map = map;
         this.max_items = max_items;
         this.max_PU = max_PU;
@@ -107,7 +110,7 @@ public class Player
             switch (item_used)
             {
                 case 1: //Fuel
-                    last_fuel_increase = Random.Range(1, 21);
+                    last_fuel_increase = 10 + Random.Range(0, 21);
                     fuel += last_fuel_increase;
                     GameManagement.Instance.fuel_textbox_add_fuel_timer = 30;
                     break;
@@ -133,10 +136,11 @@ public class Player
             switch (power_up_used)
             {
                 case 4: //Shield
-                    shield_remaining = Random.Range(60,300);    //Time in frames
+                    shield_remaining = GameManagement.Instance.min_shield + Random.Range(0,GameManagement.Instance.max_shield - GameManagement.Instance.min_shield);    //Time in frames
                     break;
-                case 5: //Hiperspeed
-                    hiperspeed_remaining = Random.Range(60,180);    //Time in frames
+                case 5: //Hyperspeed
+                    GameManagement.Instance.turns[player_ID] = Time.frameCount - 1; //Makes the player act instantly once when using hiperspeed.
+                    hyperspeed_remaining = GameManagement.Instance.min_hyperspeed + Random.Range(0,GameManagement.Instance.max_hyperspeed - GameManagement.Instance.min_hyperspeed);    //Time in frames
                     break;
                 default:
                     break;
@@ -176,7 +180,7 @@ public class Player
                     UI_is_updated = false;
                 }
                 break;
-            case 5: //Hiperspeed
+            case 5: //Hyperspeed
                 if (power_ups_stack.Size() < max_PU)
                 {
                     power_ups_stack.Add(item_PU_ID);    
@@ -187,7 +191,27 @@ public class Player
                 break;
         }
     }
-    
+    public void RotatePULeft()
+    {
+        if (power_ups_stack.Size() > 0)
+        {
+            int current_top = power_ups_stack.FindLast();
+            power_ups_stack.Delete();
+            power_ups_stack.AddAt(current_top, 0);
+            UI_is_updated = false;
+        }
+    }
+    public void RotatePURight()
+    {
+        if (power_ups_stack.Size() > 0)
+        {
+            int current_first = power_ups_stack.FindAt(0);
+            power_ups_stack.DeleteAt(0);
+            power_ups_stack.Add(current_first);
+            UI_is_updated = false;
+        }
+    }
+
 
     public void ChangeDirection(int x, int y)   //direction: {0,1,2,3} -> {right, up, left, down}
     {
@@ -225,8 +249,8 @@ public class Player
             /// </summary>
     public void Update()    //This is not Unity's Update()
     {   
-        fuel -= 0.2f;   //CHECK IF FUEL IS LESS THAN 0.2 TO DESTROY PLAYER. THIS CODE IS NOT COMPLETE.
-        if (fuel < 0.2f & !character_destroyed)
+        fuel -= 0.2f;   //Consume fuel.
+        if (fuel < 0.2f & !character_destroyed) //Destroy the player when out of fuel.
         {
             Debug.Log("Player " + player_ID + " has run out of fuel!");
             Delete();
@@ -277,7 +301,7 @@ public class Player
             map.FindAt(current_head.x, current_head.y).LP_direction = direction;
             map.FindAt(current_head.x, current_head.y).LP_particle_is_instantiated = false;
 
-            has_moved = true;
+            has_moved = true;   // Related to WASD controls.
         }
         // Deletes oldest LP if LP_size has been reached.
         if (trail.Size() > LP_size)
@@ -289,17 +313,23 @@ public class Player
             //     Debug.Log("trail.Size() = " + trail.Size());
             // }
         
-            if (trail.Size() > 1)
+            if (trail.Size() >= 1)
             {
                 // Only deletes LP if trail > 1. If it's 1 that means the player is only the head (this happens when is being deleted).
                 Point2D LP_to_delete_from_matrix = trail.FindLast();
                 map.FindAt(LP_to_delete_from_matrix.x, LP_to_delete_from_matrix.y).LP -= 1;    
+                if (character_destroyed & player_ID == 0)
+                {
+                    Debug.Log("Deleted an LP");
+                }
             }
             trail.Delete();
         }
-        if (hiperspeed_remaining > 0)
+
+        if (hyperspeed_remaining > 0)
         {
-            current_speed = speed*30 + 5;    //Change speed multiplier for something reasonable.
+            int flat_speed_increase = 8;
+            current_speed = (speed + flat_speed_increase)*2 - (speed + flat_speed_increase)/hyperspeed_remaining;    //Change speed multiplier for something reasonable.
         }
         else
         {
@@ -310,7 +340,7 @@ public class Player
     public void UpdatePowerUps()
     {
         shield_remaining -= 1;
-        hiperspeed_remaining -= 1;
+        hyperspeed_remaining -= 1;
         if (item_timer <= 0)
         {
             UseItem();
@@ -345,6 +375,10 @@ public class Player
             Point2D player_ID_to_delete_from_matrix = trail.FindAt(0);
             map.FindAt(player_ID_to_delete_from_matrix.x, player_ID_to_delete_from_matrix.y).player_IDs.DeleteValue(player_ID);
             trail.DeleteAt(0);    
+            // Spawns its objects in the stage
+            GameManagement.Instance.SpawnDroppedItemsAndPowerUps(items_queue);
+            GameManagement.Instance.SpawnDroppedItemsAndPowerUps(power_ups_stack);
+            UI_is_updated = false;
         }
         
 

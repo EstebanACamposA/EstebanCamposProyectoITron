@@ -6,10 +6,14 @@ public class GoToPlayer : MonoBehaviour
 {
     public int player_ID = 0;
     public int y = 1;
+    private Color starting_color;
+    private Renderer found_renderer;
     // Start is called before the first frame update
     void Start()
     {
-        
+        found_renderer = GetComponent<Renderer>();
+        starting_color = Color.HSVToRGB(0.2f*player_ID, 0.5f, 0.5f);
+        found_renderer.material.color = starting_color; 
     }
 
     // Update is called once per frame
@@ -36,6 +40,35 @@ public class GoToPlayer : MonoBehaviour
         move.x *= GameManagement.Instance.map_scale;
         move.z *= GameManagement.Instance.map_scale;
         transform.position = move;
+
+        ChangeColorPU();
+    }
+
+    private void ChangeColorPU()
+    {
+        Point2D PU_status = GameManagement.Instance.GetPlayerShieldAndHyperspeed(player_ID);
+        float shield_color_factor = PU_status.x / (float)GameManagement.Instance.max_shield;
+        float hyperspeed_color_factor = PU_status.y / (float)GameManagement.Instance.max_shield;
         
+        if (PU_status.x > 0)
+        {
+            if (PU_status.y > 0)
+            {
+                float average_factor = (shield_color_factor + hyperspeed_color_factor)/2;
+                found_renderer.material.color = Color.Lerp(starting_color, new Color(0, 1, 5), average_factor * 0.8f + 0.2f);
+                return;
+            }
+            found_renderer.material.color = Color.Lerp(starting_color, new Color(0, 1, 0), shield_color_factor * 0.8f + 0.2f);
+        }
+        if (PU_status.y > 0)
+        {
+            found_renderer.material.color = Color.Lerp(starting_color, new Color(0, 1, 1), hyperspeed_color_factor * 0.8f + 0.2f);
+            return;
+        }
+
+        if (PU_status.x == 0 | PU_status.y == 0)
+        {
+            found_renderer.material.color = starting_color;
+        }
     }
 }
