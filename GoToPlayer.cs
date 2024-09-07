@@ -12,7 +12,7 @@ public class GoToPlayer : MonoBehaviour
     void Start()
     {
         found_renderer = GetComponent<Renderer>();
-        starting_color = Color.HSVToRGB(0.2f*player_ID, 0.5f, 0.5f);
+        starting_color = Color.HSVToRGB(0.2f*player_ID%1, 0.5f, 0.5f);
         found_renderer.material.color = starting_color; 
     }
 

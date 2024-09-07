@@ -29,6 +29,7 @@ public class GameManagement : MonoBehaviour
     // Controller related variables.
     private int current_horizontal_key = 0;
     private int current_vertical_key = 0;
+    private bool third_person = false;
     public DataStructures.Lists.MatrixLinkedList<MapCell> map;
     // Graphics related variables.
     public GameObject light_path_particle;
@@ -46,6 +47,7 @@ public class GameManagement : MonoBehaviour
     public int base_y = 0;
     public GameObject floor;
     public GameObject main_camera;
+    private float fov_constant = 3487;
     private DataStructures.Lists.MatrixLinkedList<GameObject> LP_matrix;
     private DataStructures.Lists.MatrixLinkedList<LinkedList<GameObject>> item_PU_matrix;
     // UI Related variables.
@@ -94,15 +96,15 @@ public class GameManagement : MonoBehaviour
         {
             //Player object creation.
             turns[i] = i*60;    // Delay at the start of the game for each player to start based on their ID. Player 0 is the user and has no delay.
-            int x_of_new_player = m/playerCount*i;
+            int x_of_new_player = m/playerCount*i + m/playerCount/2;
             int y_of_new_player = n/2 + 3;
             Point2D coords_of_new_player = new(x_of_new_player, y_of_new_player);
-            int SPEEDdELETETHIS = 9;   //others DEBUG
-            if (i == 0)
-            {
-                SPEEDdELETETHIS = 9;   //player 0 DEBUG
-            }
-            players[i] = new Player(i, coords_of_new_player, SPEEDdELETETHIS, map, max_items, max_PU);   //  ----!!!!!!!!!!!!speed SHOULD BE Random.Range(1,11), NOT 3!!!!!!!!!!!!----
+            // int SPEEDdELETETHIS = 9;   //others DEBUG
+            // if (i == 0)
+            // {
+            //     SPEEDdELETETHIS = 9;   //player 0 DEBUG
+            // }
+            players[i] = new Player(i, coords_of_new_player, 5 + UnityEngine.Random.Range(0,6), map, max_items, max_PU);   //  ----!!!!!!!!!!!!speed SHOULD BE Random.Range(1,11), NOT 3!!!!!!!!!!!!----
         
             //Visible player instantiation.
             GameObject new_bike = Instantiate(Bike);    // Visible player control their own position and rotation.
@@ -485,6 +487,9 @@ public class GameManagement : MonoBehaviour
                     return;
                     case 4:
                     BotBehaviorRandom(4);
+                    return;
+                    default:
+                    BotBehaviorRandom(current_player_ID);
                     return;
                 }    
             }
@@ -892,13 +897,14 @@ public class GameManagement : MonoBehaviour
             }
         }
         // Instantiates the BackGround.
-        Vector3 scene_center = new(m/2*map_scale, base_y - 5, n/2*map_scale);
+        Vector3 scene_center = new(m/2*map_scale - map_scale/2, base_y - 5, n/2*map_scale - map_scale/2);
         GameObject bg = Instantiate(floor, scene_center, Quaternion.identity);
         Vector3 resize = new(m*map_scale*3/2, 1, n*map_scale*3/2);
         bg.transform.localScale = resize;
         // Repositions the main camera.
         scene_center.y = n*10;
         main_camera.transform.position = scene_center;
+        main_camera.GetComponent<Camera>().fieldOfView = fov_constant/n/10;
 
         //Manually destroy players. Debugging.
         // players[0].Delete();
@@ -913,8 +919,14 @@ public class GameManagement : MonoBehaviour
         Controls();
         UpdatePlayers();
         UpdateUI(user_player);
-        // PrintLPMatrix();
+        // Camera movement.
+        if (third_person)
+        {
+            main_camera.GetComponent<FollowCoords>().Follow();
+        }
 
+        // PrintLPMatrix();
+    
         // Spawn item/PU.
         if (spawn_timer < Time.frameCount) // & UnityEngine.Random.Range(0,60) == 1 //Code to add random extra time between spawns.
         {
@@ -998,6 +1010,40 @@ public class GameManagement : MonoBehaviour
             Debug.Log("RotatePowerPURight()");
         }
 
+        //Toggles camera mode with tab key.
+        if (Input.GetKeyDown(KeyCode.Tab))
+        {
+            ToggleCamera();
+        }
+
+    }
+
+    public void ToggleCamera()
+    {
+        if (third_person)
+        {
+            Vector3 camera_move = new(m/2*map_scale, n*10, n/2*map_scale);
+            main_camera.transform.position = camera_move;
+            Debug.Log("Camera rotates Back????");
+            main_camera.transform.rotation = Quaternion.Euler(90, 0, 0);
+            main_camera.GetComponent<Camera>().fieldOfView = fov_constant/n/10;
+            third_person = false;
+            return;
+        }
+        else
+        {
+            if (!players[user_player].character_destroyed)
+            {
+                Player user = players[user_player];
+                Point2D user_position = user.trail.FindAt(0);
+                int trail_length = user.trail.Size();
+                Vector3 camera_move = new(user_position.x*map_scale, base_y + map_scale*trail_length, user_position.y*map_scale);
+                main_camera.transform.position = camera_move;
+                main_camera.transform.Rotate(0, user.direction*90, 0);  //-90????????
+                main_camera.GetComponent<Camera>().fieldOfView = 90;
+                third_person = true;
+            }
+        }
     }
 
 }
