@@ -1022,7 +1022,7 @@ public class GameManagement : MonoBehaviour
     {
         if (third_person)
         {
-            Vector3 camera_move = new(m/2*map_scale, n*10, n/2*map_scale);
+            Vector3 camera_move = new(m/2*map_scale - map_scale/2, n*10, n/2*map_scale - map_scale/2);
             main_camera.transform.position = camera_move;
             Debug.Log("Camera rotates Back????");
             main_camera.transform.rotation = Quaternion.Euler(90, 0, 0);
